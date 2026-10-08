@@ -8,7 +8,6 @@ import (
 var (
 	ErrDivisionByZero  = errors.New("division by zero is undefined")
 	ErrNegativeSqrt    = errors.New("square root of negative number is undefined")
-	ErrInvalidOperator = errors.New("unsupported operation")
 	ErrUndefinedResult = errors.New("operation resulted in undefined or infinite value")
 )
 
@@ -18,45 +17,46 @@ func NewCalculatorService() *CalculatorService {
 	return &CalculatorService{}
 }
 
-func (s *CalculatorService) IsUnary(operation string) bool {
-	return operation == "sqrt" || operation == "percentage"
-}
-
-func (s *CalculatorService) Calculate(operation string, a float64, b float64) (float64, error) {
-	var result float64
-
-	switch operation {
-	case "add":
-		result = a + b
-	case "subtract":
-		result = a - b
-	case "multiply":
-		result = a * b
-	case "divide":
-		if b == 0 {
-			return 0, ErrDivisionByZero
-		}
-		result = a / b
-	case "power":
-		result = math.Pow(a, b)
-	case "sqrt":
-		if a < 0 {
-			return 0, ErrNegativeSqrt
-		}
-		result = math.Sqrt(a)
-	case "percentage":
-		result = a / 100
-	default:
-		return 0, ErrInvalidOperator
-	}
-
-	if math.IsNaN(result) || math.IsInf(result, 0) {
+func (s *CalculatorService) normalize(val float64) (float64, error) {
+	if math.IsNaN(val) || math.IsInf(val, 0) {
 		return 0, ErrUndefinedResult
 	}
-
-	if result == 0 {
-		result = 0
+	if val == 0 {
+		return 0, nil
 	}
+	return val, nil
+}
 
-	return result, nil
+func (s *CalculatorService) Add(a, b float64) (float64, error) {
+	return s.normalize(a + b)
+}
+
+func (s *CalculatorService) Subtract(a, b float64) (float64, error) {
+	return s.normalize(a - b)
+}
+
+func (s *CalculatorService) Multiply(a, b float64) (float64, error) {
+	return s.normalize(a * b)
+}
+
+func (s *CalculatorService) Divide(a, b float64) (float64, error) {
+	if b == 0 {
+		return 0, ErrDivisionByZero
+	}
+	return s.normalize(a / b)
+}
+
+func (s *CalculatorService) Power(a, b float64) (float64, error) {
+	return s.normalize(math.Pow(a, b))
+}
+
+func (s *CalculatorService) Sqrt(a float64) (float64, error) {
+	if a < 0 {
+		return 0, ErrNegativeSqrt
+	}
+	return s.normalize(math.Sqrt(a))
+}
+
+func (s *CalculatorService) Percentage(a float64) (float64, error) {
+	return s.normalize(a / 100)
 }
