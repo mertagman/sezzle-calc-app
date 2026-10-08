@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	"calculator/internal/calculator"
@@ -45,15 +46,10 @@ func NewHandler(service CalculatorService) *Handler {
 	}
 }
 
-func (h *Handler) decodeBinary(w http.ResponseWriter, r *http.Request) (*BinaryRequest, bool) {
-	if r.Method != http.MethodPost {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return nil, false
-	}
-
+func decodeJSON[T any](h *Handler, w http.ResponseWriter, r *http.Request) (*T, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1048576)
 
-	var req BinaryRequest
+	var req T
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 
@@ -63,7 +59,25 @@ func (h *Handler) decodeBinary(w http.ResponseWriter, r *http.Request) (*BinaryR
 			h.writeError(w, http.StatusRequestEntityTooLarge, "request payload exceeds size limit")
 			return nil, false
 		}
+		if errors.Is(err, io.EOF) {
+			h.writeError(w, http.StatusBadRequest, "request body cannot be empty")
+			return nil, false
+		}
 		h.writeError(w, http.StatusBadRequest, "invalid json payload")
+		return nil, false
+	}
+
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		h.writeError(w, http.StatusBadRequest, "request body must only contain a single JSON object")
+		return nil, false
+	}
+
+	return &req, true
+}
+
+func (h *Handler) decodeBinary(w http.ResponseWriter, r *http.Request) (*BinaryRequest, bool) {
+	req, ok := decodeJSON[BinaryRequest](h, w, r)
+	if !ok {
 		return nil, false
 	}
 
@@ -77,28 +91,12 @@ func (h *Handler) decodeBinary(w http.ResponseWriter, r *http.Request) (*BinaryR
 		return nil, false
 	}
 
-	return &req, true
+	return req, true
 }
 
 func (h *Handler) decodeUnary(w http.ResponseWriter, r *http.Request) (*UnaryRequest, bool) {
-	if r.Method != http.MethodPost {
-		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return nil, false
-	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, 1048576)
-
-	var req UnaryRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&req); err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			h.writeError(w, http.StatusRequestEntityTooLarge, "request payload exceeds size limit")
-			return nil, false
-		}
-		h.writeError(w, http.StatusBadRequest, "invalid json payload")
+	req, ok := decodeJSON[UnaryRequest](h, w, r)
+	if !ok {
 		return nil, false
 	}
 
@@ -107,7 +105,7 @@ func (h *Handler) decodeUnary(w http.ResponseWriter, r *http.Request) (*UnaryReq
 		return nil, false
 	}
 
-	return &req, true
+	return req, true
 }
 
 func (h *Handler) handleResult(w http.ResponseWriter, result float64, err error) {
