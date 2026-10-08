@@ -13,61 +13,61 @@ import (
 
 func TestHandler(t *testing.T) {
 	svc := calculator.NewCalculatorService()
-	allowedOrigin := "http://localhost:5173"
-	h := NewHandler(svc, allowedOrigin)
+	h := NewHandler(svc)
 
 	tests := []struct {
 		name           string
 		method         string
-		origin         string
 		body           string
 		expectedStatus int
 		expectedResult *float64
 		expectedError  string
 	}{
 		{
-			name:           "successful calculation",
+			name:           "successful binary calculation",
 			method:         http.MethodPost,
-			origin:         "http://localhost:5173",
 			body:           `{"operation":"add","a":10,"b":5}`,
 			expectedStatus: http.StatusOK,
 			expectedResult: func() *float64 { v := 15.0; return &v }(),
 		},
 		{
-			name:           "cors preflight allowed",
-			method:         http.MethodOptions,
-			origin:         "http://localhost:5173",
-			body:           "",
+			name:           "successful unary sqrt calculation without b",
+			method:         http.MethodPost,
+			body:           `{"operation":"sqrt","a":16}`,
 			expectedStatus: http.StatusOK,
+			expectedResult: func() *float64 { v := 4.0; return &v }(),
 		},
 		{
-			name:           "cors forbidden origin",
+			name:           "successful unary percentage calculation without b",
 			method:         http.MethodPost,
-			origin:         "http://malicious-site.com",
-			body:           `{"operation":"add","a":1,"b":1}`,
-			expectedStatus: http.StatusForbidden,
-			expectedError:  "cors origin not allowed",
+			body:           `{"operation":"percentage","a":75}`,
+			expectedStatus: http.StatusOK,
+			expectedResult: func() *float64 { v := 0.75; return &v }(),
 		},
 		{
 			name:           "method not allowed",
 			method:         http.MethodGet,
-			origin:         "http://localhost:5173",
 			body:           "",
 			expectedStatus: http.StatusMethodNotAllowed,
 			expectedError:  "method not allowed",
 		},
 		{
-			name:           "invalid json payload",
+			name:           "invalid json payload syntax",
 			method:         http.MethodPost,
-			origin:         "http://localhost:5173",
-			body:           `{"operation": "add", "a": "not-a-number"}`,
+			body:           `{"operation": "add", "a":`,
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "invalid json payload",
+		},
+		{
+			name:           "invalid json payload type",
+			method:         http.MethodPost,
+			body:           `{"operation": "add", "a": "not-a-number", "b": 2}`,
 			expectedStatus: http.StatusBadRequest,
 			expectedError:  "invalid json payload",
 		},
 		{
 			name:           "unknown json field rejected",
 			method:         http.MethodPost,
-			origin:         "http://localhost:5173",
 			body:           `{"operation":"add","a":1,"b":2,"unexpected":true}`,
 			expectedStatus: http.StatusBadRequest,
 			expectedError:  "invalid json payload",
@@ -75,15 +75,34 @@ func TestHandler(t *testing.T) {
 		{
 			name:           "missing operation field",
 			method:         http.MethodPost,
-			origin:         "http://localhost:5173",
 			body:           `{"a":10,"b":5}`,
 			expectedStatus: http.StatusBadRequest,
 			expectedError:  "operation field is required",
 		},
 		{
+			name:           "missing field a",
+			method:         http.MethodPost,
+			body:           `{"operation":"add","b":5}`,
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "field 'a' is required",
+		},
+		{
+			name:           "missing field b for binary operation",
+			method:         http.MethodPost,
+			body:           `{"operation":"multiply","a":5}`,
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "field 'b' is required",
+		},
+		{
+			name:           "unsupported operation",
+			method:         http.MethodPost,
+			body:           `{"operation":"invalid_op","a":10,"b":2}`,
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "unsupported operation",
+		},
+		{
 			name:           "division by zero unprocessable",
 			method:         http.MethodPost,
-			origin:         "http://localhost:5173",
 			body:           `{"operation":"divide","a":10,"b":0}`,
 			expectedStatus: http.StatusUnprocessableEntity,
 			expectedError:  "division by zero is undefined",
@@ -91,10 +110,23 @@ func TestHandler(t *testing.T) {
 		{
 			name:           "negative square root unprocessable",
 			method:         http.MethodPost,
-			origin:         "http://localhost:5173",
-			body:           `{"operation":"sqrt","a":-4,"b":0}`,
+			body:           `{"operation":"sqrt","a":-4}`,
 			expectedStatus: http.StatusUnprocessableEntity,
 			expectedError:  "square root of negative number is undefined",
+		},
+		{
+			name:           "undefined power calculation unprocessable",
+			method:         http.MethodPost,
+			body:           `{"operation":"power","a":0,"b":-1}`,
+			expectedStatus: http.StatusUnprocessableEntity,
+			expectedError:  "operation resulted in undefined or infinite value",
+		},
+		{
+			name:           "payload exceeds size limit",
+			method:         http.MethodPost,
+			body:           `{"operation":"add","a":1,"b":2,"extra":"` + strings.Repeat("x", 1048576+10) + `"}`,
+			expectedStatus: http.StatusRequestEntityTooLarge,
+			expectedError:  "request payload exceeds size limit",
 		},
 	}
 
@@ -102,9 +134,6 @@ func TestHandler(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, "/api/v1/calculate", bytes.NewBufferString(tc.body))
 			req.Header.Set("Content-Type", "application/json")
-			if tc.origin != "" {
-				req.Header.Set("Origin", tc.origin)
-			}
 
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)

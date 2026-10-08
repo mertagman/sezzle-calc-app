@@ -18,6 +18,10 @@ func NewCalculatorService() *CalculatorService {
 	return &CalculatorService{}
 }
 
+func (s *CalculatorService) IsUnary(operation string) bool {
+	return operation == "sqrt" || operation == "percentage"
+}
+
 func (s *CalculatorService) Calculate(operation string, a float64, b float64) (float64, error) {
 	var result float64
 
@@ -48,6 +52,10 @@ func (s *CalculatorService) Calculate(operation string, a float64, b float64) (f
 
 	if math.IsNaN(result) || math.IsInf(result, 0) {
 		return 0, ErrUndefinedResult
+	}
+
+	if result == 0 {
+		result = 0
 	}
 
 	return result, nil
