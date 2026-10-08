@@ -10,12 +10,13 @@ import (
 
 type CalculatorService interface {
 	Calculate(operation string, a float64, b float64) (float64, error)
+	IsUnary(operation string) bool
 }
 
 type CalculateRequest struct {
-	Operation string  `json:"operation"`
-	A         float64 `json:"a"`
-	B         float64 `json:"b"`
+	Operation string   `json:"operation"`
+	A         *float64 `json:"a"`
+	B         *float64 `json:"b"`
 }
 
 type CalculateResponse struct {
@@ -27,43 +28,21 @@ type ErrorResponse struct {
 }
 
 type Handler struct {
-	service       CalculatorService
-	allowedOrigin string
+	service CalculatorService
 }
 
-func NewHandler(service CalculatorService, allowedOrigin string) *Handler {
+func NewHandler(service CalculatorService) *Handler {
 	return &Handler{
-		service:       service,
-		allowedOrigin: allowedOrigin,
+		service: service,
 	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	origin := r.Header.Get("Origin")
-
-	if origin != "" && origin != h.allowedOrigin {
-		h.writeError(w, http.StatusForbidden, "cors origin not allowed")
-		return
-	}
-
-	if origin == h.allowedOrigin {
-		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.Header().Set("Vary", "Origin")
-	}
-
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
 	if r.Method != http.MethodPost {
 		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	// 1 MB limit (DoS korumasi)
 	r.Body = http.MaxBytesReader(w, r.Body, 1048576)
 
 	var req CalculateRequest
@@ -71,6 +50,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			h.writeError(w, http.StatusRequestEntityTooLarge, "request payload exceeds size limit")
+			return
+		}
 		h.writeError(w, http.StatusBadRequest, "invalid json payload")
 		return
 	}
@@ -80,7 +64,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.service.Calculate(req.Operation, req.A, req.B)
+	if req.A == nil {
+		h.writeError(w, http.StatusBadRequest, "field 'a' is required")
+		return
+	}
+
+	var bVal float64
+	if !h.service.IsUnary(req.Operation) {
+		if req.B == nil {
+			h.writeError(w, http.StatusBadRequest, "field 'b' is required")
+			return
+		}
+		bVal = *req.B
+	}
+
+	result, err := h.service.Calculate(req.Operation, *req.A, bVal)
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, calculator.ErrDivisionByZero) ||
