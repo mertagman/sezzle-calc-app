@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,31 +13,8 @@ import (
 
 	"calculator/internal/calculator"
 	"calculator/internal/handler"
+	"calculator/internal/server"
 )
-
-func corsMiddleware(allowedOrigin string, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-
-		if origin != "" && origin == allowedOrigin {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-			w.Header().Set("Vary", "Origin")
-		}
-
-		if r.Method == http.MethodOptions {
-			if origin != "" && origin == allowedOrigin {
-				w.WriteHeader(http.StatusNoContent)
-			} else {
-				w.WriteHeader(http.StatusForbidden)
-			}
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
 
 func main() {
 	port := os.Getenv("PORT")
@@ -53,23 +30,9 @@ func main() {
 	calcService := calculator.NewCalculatorService()
 	calcHandler := handler.NewHandler(calcService)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/v1/add", calcHandler.Add)
-	mux.HandleFunc("POST /api/v1/subtract", calcHandler.Subtract)
-	mux.HandleFunc("POST /api/v1/multiply", calcHandler.Multiply)
-	mux.HandleFunc("POST /api/v1/divide", calcHandler.Divide)
-	mux.HandleFunc("POST /api/v1/power", calcHandler.Power)
-	mux.HandleFunc("POST /api/v1/sqrt", calcHandler.Sqrt)
-	mux.HandleFunc("POST /api/v1/percentage", calcHandler.Percentage)
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
-	})
-
-	server := &http.Server{
+	httpServer := &http.Server{
 		Addr:              fmt.Sprintf(":%s", port),
-		Handler:           corsMiddleware(allowedOrigin, mux),
+		Handler:           server.NewRouter(calcHandler, allowedOrigin),
 		ReadHeaderTimeout: 3 * time.Second,
 		ReadTimeout:       5 * time.Second,
 		WriteTimeout:      10 * time.Second,
@@ -80,21 +43,23 @@ func main() {
 	defer stop()
 
 	go func() {
-		log.Printf("Calculator API running on port %s (Allowed Origin: %s)\n", port, allowedOrigin)
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("Server failed to start: %v\n", err)
+		slog.Info("server starting", "port", port, "allowed_origin", allowedOrigin)
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("server failed to start", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	<-ctx.Done()
-	log.Println("Shutting down server gracefully...")
+	slog.Info("shutting down server gracefully")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v\n", err)
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		slog.Error("server forced to shutdown", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Server stopped")
+	slog.Info("server stopped")
 }
