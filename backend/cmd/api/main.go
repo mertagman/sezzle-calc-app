@@ -54,7 +54,13 @@ func main() {
 	calcHandler := handler.NewHandler(calcService)
 
 	mux := http.NewServeMux()
-	mux.Handle("POST /api/v1/calculate", calcHandler)
+	mux.HandleFunc("POST /api/v1/add", calcHandler.Add)
+	mux.HandleFunc("POST /api/v1/subtract", calcHandler.Subtract)
+	mux.HandleFunc("POST /api/v1/multiply", calcHandler.Multiply)
+	mux.HandleFunc("POST /api/v1/divide", calcHandler.Divide)
+	mux.HandleFunc("POST /api/v1/power", calcHandler.Power)
+	mux.HandleFunc("POST /api/v1/sqrt", calcHandler.Sqrt)
+	mux.HandleFunc("POST /api/v1/percentage", calcHandler.Percentage)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
