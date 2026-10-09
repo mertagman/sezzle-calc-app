@@ -12,8 +12,8 @@ import (
 )
 
 func TestHandler(t *testing.T) {
-	svc := calculator.NewCalculatorService()
-	h := NewHandler(svc)
+	svc := calculator.New()
+	h := New(svc)
 
 	tests := []struct {
 		name           string

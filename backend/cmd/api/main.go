@@ -27,8 +27,8 @@ func main() {
 		allowedOrigin = "http://localhost:5173"
 	}
 
-	calcService := calculator.NewCalculatorService()
-	calcHandler := handler.NewHandler(calcService)
+	calcService := calculator.New()
+	calcHandler := handler.New(calcService)
 
 	httpServer := &http.Server{
 		Addr:              fmt.Sprintf(":%s", port),
