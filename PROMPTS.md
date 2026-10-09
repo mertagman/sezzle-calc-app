@@ -64,6 +64,8 @@ frontend/
 ├── tsconfig.node.json
 └── vite.config.ts
 
+
+# back --
 go run ./cmd/api
 
 go test -coverprofile=coverage.out ./...
@@ -74,6 +76,23 @@ docker run -d -p 8080:8080 -e ALLOWED_ORIGIN="http://localhost:5173" --name calc
 docker stop calc-backend && docker rm calc-backend
 
 
+# front -- 
+npm create vite@latest . -- --template react-ts
+npm install
+npm install -D vitest @testing-library/react @testing-library/jest-dom @testing-library/user-event jsdom
+
+rm -f src/App.css src/assets/react.svg
+
+
+
+npm run dev
+
+npm run test:run
+
+npm run test
+
+docker build -t calculator-frontend .
+docker run -d -p 5173:80 --name calc-frontend calculator-frontend
 
 
 slog
