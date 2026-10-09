@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"calculator/internal/calculator"
@@ -40,7 +41,7 @@ type Handler struct {
 	service CalculatorService
 }
 
-func NewHandler(service CalculatorService) *Handler {
+func New(service CalculatorService) *Handler {
 	return &Handler{
 		service: service,
 	}
@@ -110,13 +111,15 @@ func (h *Handler) decodeUnary(w http.ResponseWriter, r *http.Request) (*UnaryReq
 
 func (h *Handler) handleResult(w http.ResponseWriter, result float64, err error) {
 	if err != nil {
-		status := http.StatusBadRequest
-		if errors.Is(err, calculator.ErrDivisionByZero) ||
-			errors.Is(err, calculator.ErrNegativeSqrt) ||
-			errors.Is(err, calculator.ErrUndefinedResult) {
-			status = http.StatusUnprocessableEntity
+		switch {
+		case errors.Is(err, calculator.ErrDivisionByZero),
+			errors.Is(err, calculator.ErrNegativeSqrt),
+			errors.Is(err, calculator.ErrUndefinedResult):
+			h.writeError(w, http.StatusUnprocessableEntity, err.Error())
+		default:
+			slog.Error("unexpected calculation error", "error", err)
+			h.writeError(w, http.StatusInternalServerError, "internal server error")
 		}
-		h.writeError(w, status, err.Error())
 		return
 	}
 

@@ -13,7 +13,7 @@ import (
 const testOrigin = "http://localhost:5173"
 
 func TestRouter(t *testing.T) {
-	router := NewRouter(handler.NewHandler(calculator.NewCalculatorService()), testOrigin)
+	router := NewRouter(handler.New(calculator.New()), testOrigin)
 
 	tests := []struct {
 		name           string
