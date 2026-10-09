@@ -40,3 +40,5 @@ pnpm-debug.log*
 coverage/
 frontend/coverage/
 backend/coverage.out
+
+.agents/
