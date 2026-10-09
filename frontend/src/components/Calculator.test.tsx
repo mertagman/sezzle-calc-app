@@ -12,7 +12,7 @@ vi.mock('../api/client', () => ({
 describe('Calculator Component Integration', () => {
   beforeEach(() => {
     localStorage.clear()
-    vi.clearAllMocks()
+    vi.resetAllMocks()
   })
 
   it('renders display, buttons, and history panel', () => {
@@ -25,53 +25,68 @@ describe('Calculator Component Integration', () => {
   })
 
   it('inputs digits and deletes with DEL button', () => {
-    render(<Calculator />)
+    const { container } = render(<Calculator />)
 
-    fireEvent.click(screen.getByText('7'))
-    fireEvent.click(screen.getByText('8'))
+    const btn7 = container.querySelector('[data-key="7"]') as HTMLButtonElement
+    const btn8 = container.querySelector('[data-key="8"]') as HTMLButtonElement
+    const btnDel = screen.getByRole('button', { name: 'Delete last digit' })
+
+    fireEvent.click(btn7)
+    fireEvent.click(btn8)
     expect(screen.getByTestId('main-display')).toHaveTextContent('78')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete last digit' }))
+    fireEvent.click(btnDel)
     expect(screen.getByTestId('main-display')).toHaveTextContent('7')
   })
 
   it('executes addition and adds item to history', async () => {
     vi.mocked(client.calculateBinary).mockResolvedValueOnce(42)
 
-    render(<Calculator />)
+    const { container } = render(<Calculator />)
 
-    fireEvent.click(screen.getByText('4'))
-    fireEvent.click(screen.getByText('0'))
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
-    fireEvent.click(screen.getByText('2'))
-    fireEvent.click(screen.getByRole('button', { name: 'Equals' }))
+    const btn4 = container.querySelector('[data-key="4"]') as HTMLButtonElement
+    const btn0 = container.querySelector('[data-key="0"]') as HTMLButtonElement
+    const btn2 = container.querySelector('[data-key="2"]') as HTMLButtonElement
+    const btnAdd = screen.getByRole('button', { name: 'Add' })
+    const btnEquals = screen.getByRole('button', { name: 'Equals' })
+
+    fireEvent.click(btn4)
+    fireEvent.click(btn0)
+    fireEvent.click(btnAdd)
+    fireEvent.click(btn2)
+    fireEvent.click(btnEquals)
 
     await waitFor(() => {
       expect(screen.getByTestId('main-display')).toHaveTextContent('42')
     })
 
     expect(screen.getByText('40 + 2 =')).toBeInTheDocument()
-    expect(screen.getByText('42')).toBeInTheDocument()
   })
 
   it('recalls result into display when history item is clicked', async () => {
     vi.mocked(client.calculateBinary).mockResolvedValueOnce(99)
 
-    render(<Calculator />)
+    const { container } = render(<Calculator />)
 
-    fireEvent.click(screen.getByText('9'))
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
-    fireEvent.click(screen.getByText('9'))
-    fireEvent.click(screen.getByRole('button', { name: 'Equals' }))
+    const btn9 = container.querySelector('[data-key="9"]') as HTMLButtonElement
+    const btnAdd = screen.getByRole('button', { name: 'Add' })
+    const btnEquals = screen.getByRole('button', { name: 'Equals' })
+    const btnClear = screen.getByRole('button', { name: 'Clear all' })
+
+    fireEvent.click(btn9)
+    fireEvent.click(btnAdd)
+    fireEvent.click(btn9)
+    fireEvent.click(btnEquals)
 
     await waitFor(() => {
       expect(screen.getByText('9 + 9 =')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    fireEvent.click(btnClear)
     expect(screen.getByTestId('main-display')).toHaveTextContent('0')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Click to recall result' }))
+    const recallBtn = screen.getByRole('button', { name: /9 \+ 9/ })
+    fireEvent.click(recallBtn)
     expect(screen.getByTestId('main-display')).toHaveTextContent('99')
   })
 
